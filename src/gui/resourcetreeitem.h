@@ -6,31 +6,38 @@
 
 #include "src/aurora/archive.h"
 #include "src/aurora/util.h"
-
+#include "src/images/dds.h"
+#include "src/images/sbm.h"
+#include "src/images/tga.h"
+#include "src/images/tpc.h"
+#include "src/images/txb.h"
+#include "src/images/winiconimage.h"
 #include "src/sound/sound.h"
 #include "src/sound/audiostream.h"
 
-#include "src/images/decoder.h"
+namespace GUI {
 
+class MainWindow;
+
+enum Source {
+    kSourceDirectory= 0,
+    kSourceFile = 1,
+    kSourceArchive = 2,
+    kSourceArchiveFile = 3
+};
+
+// can't foward declare nested types
+// so it has to be out here (for treemodel.h)
+struct ArchiveInfo {
+    Aurora::Archive *archive;
+    bool addedArchiveMembers;
+    uint32 archiveIndex;
+};
 
 class ResourceTreeItem {
 public:
-    enum Source {
-        kSourceDirectory= 0,
-        kSourceFile = 1,
-        kSourceArchive = 2,
-        kSourceArchiveFile = 3
-    };
-
-    struct ArchiveInfo {
-        Aurora::Archive *archive;
-        bool addedArchiveMembers;
-        uint32 archiveIndex;
-    };
-
     struct FileInfo {
-        QString fileName; // this is what is displayed in the tree view
-        QString fullPath; // used for QFileInfo and item info such as logging
+        QString fullPath; // used for QFileInfo and item info e.g. logging
         bool isDir;
         Source source;
         Aurora::FileType fileType;
@@ -58,6 +65,9 @@ public:
     void appendChild(ResourceTreeItem *child);
     void setParent(ResourceTreeItem *parent);
 
+    /** Both. **/
+    const QString getData() const; // doubles as filename
+
     /** File info. **/
     const Aurora::FileType getFileType() const;
     const Aurora::ResourceType getResourceType() const;
@@ -65,11 +75,10 @@ public:
     const QFileInfo getFileInfo() const;
     const qint64 getSize() const;
     const QString getPath() const;
-    const QString getName() const;
     const Source getSource() const;
 
     /** Resource information. **/
-    ArchiveInfo &getData();
+    ArchiveInfo &getArchive();
     Common::SeekableReadStream *getResourceData() const;
     Images::Decoder *getImage() const;
     Images::Decoder *getImage(Common::SeekableReadStream &res, Aurora::FileType type) const;
@@ -81,6 +90,9 @@ private:
     ResourceTreeItem *_parent;
     QList<ResourceTreeItem*> _children;
 
+    /** Both. **/
+    QString _data; // The filename. It's what the model displays.
+
     /** File information. **/
     FileInfo _fileInfo;
 
@@ -88,5 +100,7 @@ private:
     SoundInfo _soundInfo;
     ArchiveInfo _archiveInfo;
 };
+
+} // End of namespace GUI
 
 #endif // TREEITEM_H

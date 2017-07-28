@@ -11,6 +11,13 @@
 #include "src/common/strutil.h"
 #include "src/common/writefile.h"
 #include "src/gui/mainwindow.h"
+#include "src/gui/panelpreviewempty.h"
+#include "src/gui/panelpreviewimage.h"
+#include "src/gui/panelpreviewsound.h"
+#include "src/gui/panelpreviewtext.h"
+#include "src/gui/resourceinfopanel.h"
+#include "src/gui/resourcetree.h"
+#include "src/gui/resourcetreeitem.h"
 #include "src/images/dumptga.h"
 #include "src/sound/sound.h"
 #include "src/sound/audiostream.h"
@@ -69,14 +76,13 @@ MainWindow::MainWindow(QWidget *parent, const char *version, const QSize &size, 
 }
 
 MainWindow::~MainWindow() {
-//    delete _status;
 }
 
-void MainWindow::slotLogAppend(QString text) {
+void MainWindow::slotLogAppend(const QString &text) {
     _ui.log->append(text);
 }
 
-void MainWindow::setTreeViewModel(QString path) {
+void MainWindow::setTreeViewModel(const QString &path) {
     if (_rootPath == path)
         return;
     _rootPath = path;
@@ -89,15 +95,16 @@ void MainWindow::setTreeViewModel(QString path) {
     _treeModel.reset();
     _ui.treeView->setModel(nullptr);
 
-    _treeModel = std::make_unique<ResourceTree>(_status, path, _ui.treeView);
+    _treeModel = std::make_unique<ResourceTree>(this, path, _ui.treeView);
     _ui.treeView->setModel(_treeModel.get());
+    _ui.treeView->expandToDepth(0);
     _ui.treeView->show();
 
     _ui.treeView->resizeColumnToContents(0);
 
 
     QObject::connect(_ui.treeView->selectionModel(), &QItemSelectionModel::selectionChanged,
-                     this, &MainWindow::selection);
+                     this, &MainWindow::resourceSelect);
 
 
     _ui.log->append(tr("Set root: %1").arg(path));
@@ -185,9 +192,9 @@ void MainWindow::showPreviewPanel() {
     }
 }
 
-void MainWindow::selection(const QItemSelection &selected, const QItemSelection &deselected) {
+void MainWindow::resourceSelect(const QItemSelection &selected, const QItemSelection &deselected) {
     const QModelIndex index = selected.indexes().at(0);
-    _currentItem = _treeModel->getNode(index);
+    _currentItem = _treeModel->getItem(index);
     _resInfo->update(_currentItem);
     showPreviewPanel();
 
@@ -211,7 +218,7 @@ void MainWindow::saveItem() {
     if (fileName.isEmpty())
         return;
 
-    _status->push(constructStatus("Saving", _currentItem->getName(), fileName));
+    _status->push(constructStatus("Saving", _currentItem->getData(), fileName));
     BOOST_SCOPE_EXIT((&_status)) {
         _status->pop();
     } BOOST_SCOPE_EXIT_END
@@ -242,7 +249,7 @@ void MainWindow::exportTGA() {
     if (fileName.isEmpty())
         return;
 
-    _status->push(constructStatus("Exporting", _currentItem->getName(), fileName));
+    _status->push(constructStatus("Exporting", _currentItem->getData(), fileName));
     BOOST_SCOPE_EXIT((&_status)) {
         _status->pop();
     } BOOST_SCOPE_EXIT_END
@@ -277,7 +284,7 @@ void MainWindow::exportBMUMP3() {
 
     const QString title = "Save MP3 file";
     const QString mask  = "MP3 file (*.mp3)|*.mp3";
-    const QString def   = TypeMan.setFileType(USTR(_currentItem->getName()), Aurora::kFileTypeMP3).toQString();
+    const QString def   = TypeMan.setFileType(USTR(_currentItem->getData()), Aurora::kFileTypeMP3).toQString();
 
     QString fileName = QFileDialog::getSaveFileName(this,
             title, def,
@@ -286,7 +293,7 @@ void MainWindow::exportBMUMP3() {
     if (fileName.isEmpty())
         return;
 
-    _status->push(constructStatus("Exporting", _currentItem->getName(), fileName));
+    _status->push(constructStatus("Exporting", _currentItem->getData(), fileName));
     BOOST_SCOPE_EXIT((&_status)) {
         _status->pop();
     } BOOST_SCOPE_EXIT_END
@@ -388,7 +395,7 @@ void MainWindow::exportWAV() {
 
     const QString title = "Save PCM WAV file";
     const QString mask  = "WAV file (*.wav)|*.wav";
-    const QString def   = TypeMan.setFileType(USTR(_currentItem->getName()), Aurora::kFileTypeWAV).toQString();
+    const QString def   = TypeMan.setFileType(USTR(_currentItem->getData()), Aurora::kFileTypeWAV).toQString();
 
     QString fileName = QFileDialog::getSaveFileName(this,
             title, def,
@@ -397,7 +404,7 @@ void MainWindow::exportWAV() {
     if (fileName.isEmpty())
         return;
 
-    _status->push(constructStatus("Exporting", _currentItem->getName(), fileName));
+    _status->push(constructStatus("Exporting", _currentItem->getData(), fileName));
     BOOST_SCOPE_EXIT((&_status)) {
         _status->pop();
     } BOOST_SCOPE_EXIT_END
@@ -423,7 +430,7 @@ void MainWindow::slotAbout() {
     QMessageBox::about(this, "About", msg);
 }
 
-std::shared_ptr<StatusBar> MainWindow::getStatusBar() {
+std::shared_ptr<StatusBar> MainWindow::status() {
     return _status;
 }
 

@@ -2,7 +2,6 @@
 #define MAINWINDOW_H
 
 #include <memory>
-
 #include <QMainWindow>
 #include <QFileSystemModel>
 #include <QGraphicsView>
@@ -13,15 +12,11 @@
 
 #include "verdigris/wobjectdefs.h"
 
+#include "src/common/readstream.h"
 #include "src/common/ustring.h"
-#include "src/gui/panelpreviewempty.h"
-#include "src/gui/panelpreviewimage.h"
-#include "src/gui/panelpreviewsound.h"
-#include "src/gui/panelpreviewtext.h"
-#include "src/gui/panelresourceinfo.h"
+#include "src/common/writestream.h"
 #include "src/gui/statusbar.h"
-#include "src/gui/resourcetree.h"
-#include "src/gui/resourcetreeitem.h"
+#include "src/sound/sound.h"
 
 #include "ui/ui_mainwindow.h"
 
@@ -31,6 +26,14 @@ namespace Ui {
 
 namespace GUI {
 
+class PanelPreviewEmpty;
+class PanelPreviewImage;
+class PanelPreviewSound;
+class PanelPreviewText;
+class ResourceInfoPanel;
+class ResourceTreeItem;
+class ResourceTree;
+
 class MainWindow : public QMainWindow {
     W_OBJECT(MainWindow)
 
@@ -38,42 +41,21 @@ public:
     MainWindow(QWidget *parent = 0, const char *version = "", const QSize &size = QSize(800, 600), const Common::UString &path = "");
     ~MainWindow();
 
+    std::shared_ptr<StatusBar> status();
+
 private /*slots*/:
-    void setTreeViewModel(QString path);
-    W_SLOT(setTreeViewModel)
-
+    void setTreeViewModel(const QString &path);
     void slotOpenDir();
-    W_SLOT(slotOpenDir, W_Access::Private)
-
     void slotOpenFile();
-    W_SLOT(slotOpenFile, W_Access::Private)
-
     void slotCloseDir();
-    W_SLOT(slotCloseDir, W_Access::Private)
-
     void slotQuit();
-    W_SLOT(slotQuit, W_Access::Private)
-
-    void slotLogAppend(QString text);
-    W_SLOT(slotLogAppend, W_Access::Private)
-
+    void slotLogAppend(const QString &text);
     void saveItem();
-    W_SLOT(saveItem, W_Access::Private)
-
     void exportTGA();
-    W_SLOT(exportTGA, W_Access::Private)
-
     void exportBMUMP3();
-    W_SLOT(exportBMUMP3, W_Access::Private)
-
     void exportWAV();
-    W_SLOT(exportWAV, W_Access::Private)
-
     void slotAbout();
-    W_SLOT(slotAbout, W_Access::Private)
-
-    std::shared_ptr<StatusBar> getStatusBar();
-    void selection(const QItemSelection &selected, const QItemSelection &deselected);
+    void resourceSelect(const QItemSelection &selected, const QItemSelection &deselected);
 
 private:
     void setLabels();

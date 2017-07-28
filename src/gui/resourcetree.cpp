@@ -1,8 +1,4 @@
-#include <QDebug>
 #include <QDir>
-#include <QDirIterator>
-#include <QFileInfoList>
-#include <QTreeView>
 #include <boost/scope_exit.hpp>
 
 #include "verdigris/wobjectimpl.h"
@@ -10,22 +6,24 @@
 #include "src/aurora/biffile.h"
 #include "src/aurora/bzffile.h"
 #include "src/aurora/erffile.h"
+#include "src/aurora/keyfile.h"
 #include "src/aurora/rimfile.h"
 #include "src/aurora/zipfile.h"
 #include "src/common/filepath.h"
 #include "src/common/readfile.h"
+#include "src/gui/mainwindow.h"
 #include "src/gui/statusbar.h"
 #include "src/gui/resourcetree.h"
+#include "src/gui/resourcetreeitem.h"
 
-namespace GUI
-{
+namespace GUI {
 
 W_OBJECT_IMPL(ResourceTree)
 
-ResourceTree::ResourceTree(std::shared_ptr<StatusBar> statusBar, QString path, QObject *parent)
+ResourceTree::ResourceTree(MainWindow *mainWindow, const QString &path, QObject *parent)
     : QAbstractItemModel(parent)
     , _iconProvider(new QFileIconProvider())
-    , _status(statusBar)
+    , _mainWindow(mainWindow)
 {
     _rootPath = path;
     _root = new ResourceTreeItem("Filename", nullptr);
@@ -39,16 +37,18 @@ ResourceTree::~ResourceTree() {
     delete _root;
 }
 
-void ResourceTree::setRootPath(QString path) {
-    _status->push("Populating resource tree...");
-    populate(path, _root);
-    _status->pop();
+void ResourceTree::setRootPath(const QString &path) {
+    _mainWindow->status()->push("Populating resource tree...");
+    ResourceTreeItem *top = new ResourceTreeItem(QFileInfo(path).canonicalFilePath(), _root);
+    _root->appendChild(top);
+    populate(path, top);
+    _mainWindow->status()->pop();
 }
 
-void ResourceTree::populate(const QString& path, ResourceTreeItem *parentNode) {
+void ResourceTree::populate(const QString& path, ResourceTreeItem *parent) {
     if (QFileInfo(path).isDir()) {
-        _status->push(tr("Recursively adding all files in ") + path + "...");
-        ResourceTreeItem *curNode;
+        _mainWindow->status()->push(tr("Recursively adding all files in ") + path + "...");
+        ResourceTreeItem *curItem;
 
         QDir dir(path);
         dir.setFilter(QDir::AllEntries | QDir::NoDotAndDotDot);
@@ -57,20 +57,20 @@ void ResourceTree::populate(const QString& path, ResourceTreeItem *parentNode) {
         QFileInfoList list = dir.entryInfoList();
 
         for (auto &e : list) {
-            curNode = new ResourceTreeItem(e.canonicalFilePath(), parentNode);
-            parentNode->appendChild(curNode);
+            curItem = new ResourceTreeItem(e.canonicalFilePath(), parent);
+            parent->appendChild(curItem);
             if (e.isDir()) {
-                populate(e.canonicalFilePath(), curNode);
+                populate(e.canonicalFilePath(), curItem);
             }
         }
     }
     else {
-        _status->push(tr("Adding file ") + path + "...");
-        parentNode->appendChild(new ResourceTreeItem(path, parentNode));
+        _mainWindow->status()->push(tr("Adding file ") + path + "...");
+        parent->appendChild(new ResourceTreeItem(path, parent));
     }
 }
 
-ResourceTreeItem *ResourceTree::getNode(const QModelIndex &index) const {
+ResourceTreeItem *ResourceTree::getItem(const QModelIndex &index) const {
     if (index.isValid())
         return static_cast<ResourceTreeItem*>(index.internalPointer());
 
@@ -78,7 +78,7 @@ ResourceTreeItem *ResourceTree::getNode(const QModelIndex &index) const {
 }
 
 bool ResourceTree::canFetchMore(const QModelIndex &index) const {
-    auto type = getNode(index)->getFileType();
+    auto type = getItem(index)->getFileType();
     if (type == Aurora::kFileTypeZIP ||
         type == Aurora::kFileTypeERF ||
         type == Aurora::kFileTypeMOD ||
@@ -96,7 +96,7 @@ void ResourceTree::fetchMore(const QModelIndex &index) {
         return;
 
     // We only need special treatment for these archives
-    auto type = getNode(index)->getFileType();
+    auto type = getItem(index)->getFileType();
     if (type != Aurora::kFileTypeZIP &&
         type != Aurora::kFileTypeERF &&
         type != Aurora::kFileTypeMOD &&
@@ -107,16 +107,16 @@ void ResourceTree::fetchMore(const QModelIndex &index) {
         type != Aurora::kFileTypeKEY)
         return;
 
-    ResourceTreeItem *item = getNode(index);
+    ResourceTreeItem *item = getItem(index);
 
     // We already added the archive members. Nothing to do
-    ResourceTreeItem::ArchiveInfo &archiveInfo = item->getData();
+    ArchiveInfo &archiveInfo = item->getArchive();
     if (archiveInfo.addedArchiveMembers)
         return;
 
-    _status->push(tr("Loading archive") + item->getName() + "...");
-    BOOST_SCOPE_EXIT((&_status)) {
-        _status->pop();
+    _mainWindow->status()->push(tr("Loading archive") + item->getData() + "...");
+    BOOST_SCOPE_EXIT((&_mainWindow)) {
+        _mainWindow->status()->pop();
     } BOOST_SCOPE_EXIT_END
 
     // Load the archive, if necessary
@@ -126,7 +126,7 @@ void ResourceTree::fetchMore(const QModelIndex &index) {
         } catch (Common::Exception &e) {
             // If that fails, print the error and treat this archive as empty
 
-            e.add("Failed to load archive \"%s\"", getNode(index)->getName().toStdString().c_str());
+            e.add("Failed to load archive \"%s\"", getItem(index)->getData().toStdString().c_str());
             Common::printException(e, "WARNING: ");
 
             return;
@@ -142,7 +142,7 @@ bool ResourceTree::hasChildren(const QModelIndex &index) const {
     if (!index.isValid())
         return true;
 
-    auto type = getNode(index)->getFileType();
+    auto type = getItem(index)->getFileType();
     if (type == Aurora::kFileTypeZIP ||
         type == Aurora::kFileTypeERF ||
         type == Aurora::kFileTypeMOD ||
@@ -153,11 +153,11 @@ bool ResourceTree::hasChildren(const QModelIndex &index) const {
         type == Aurora::kFileTypeKEY)
         return true;
 
-    return getNode(index)->hasChildren();
+    return getItem(index)->hasChildren();
 }
 
 int ResourceTree::rowCount(const QModelIndex &parent) const {
-    return getNode(parent)->childCount();
+    return getItem(parent)->childCount();
 }
 
 int ResourceTree::columnCount(const QModelIndex &parent) const {
@@ -165,7 +165,7 @@ int ResourceTree::columnCount(const QModelIndex &parent) const {
 }
 
 QModelIndex ResourceTree::parent(const QModelIndex &index) const {
-    ResourceTreeItem *parent = getNode(index)->getParent();
+    ResourceTreeItem *parent = getItem(index)->getParent();
     if (parent == _root)
         return QModelIndex();
 
@@ -173,7 +173,7 @@ QModelIndex ResourceTree::parent(const QModelIndex &index) const {
 }
 
 QModelIndex ResourceTree::index(int row, int column, const QModelIndex &parent) const {
-    ResourceTreeItem *child = getNode(parent)->childAt(row);
+    ResourceTreeItem *child = getItem(parent)->childAt(row);
 
     if (!child)
         return QModelIndex();
@@ -183,7 +183,7 @@ QModelIndex ResourceTree::index(int row, int column, const QModelIndex &parent) 
 
 QVariant ResourceTree::headerData(int section, Qt::Orientation orientation, int role) const {
     if (orientation == Qt::Horizontal && role == Qt::DisplayRole)
-        return _root->getName();
+        return _root->getData();
 
     return QVariant();
 }
@@ -192,12 +192,12 @@ QVariant ResourceTree::data(const QModelIndex &index, int role) const {
     if (!index.isValid())
         return QVariant();
 
-    ResourceTreeItem *cur = getNode(index);
+    ResourceTreeItem *cur = getItem(index);
 
     if (role == Qt::DecorationRole)
     {
         switch (cur->getSource()) {
-            case ResourceTreeItem::Source::kSourceFile:
+            case Source::kSourceFile:
                 switch (cur->getFileType()) {
                     case Aurora::kFileTypeZIP:
                     case Aurora::kFileTypeERF:
@@ -212,7 +212,7 @@ QVariant ResourceTree::data(const QModelIndex &index, int role) const {
                     default:
                         return _iconProvider->icon(QFileIconProvider::File);
                 }
-            case ResourceTreeItem::Source::kSourceDirectory:
+            case Source::kSourceDirectory:
                 return _iconProvider->icon(QFileIconProvider::Folder);
             default:
                 return _iconProvider->icon(QFileIconProvider::File);
@@ -220,7 +220,7 @@ QVariant ResourceTree::data(const QModelIndex &index, int role) const {
     }
 
     if (role == Qt::DisplayRole)
-        return cur->getName();
+        return cur->getData();
 
     return QVariant();
 }
@@ -232,27 +232,27 @@ Qt::ItemFlags ResourceTree::flags(const QModelIndex &index) const {
     return QAbstractItemModel::flags(index);
 }
 
-void ResourceTree::insertItemsFromArchive(ResourceTreeItem::ArchiveInfo &data, const QModelIndex &parent) {
-    QList<ResourceTreeItem*> nodes;
+void ResourceTree::insertItemsFromArchive(ArchiveInfo &data, const QModelIndex &parentIndex) {
+    QList<ResourceTreeItem*> items;
 
-    ResourceTreeItem *parentItem = getNode(parent);
+    ResourceTreeItem *parentItem = getItem(parentIndex);
 
     auto resources = data.archive->getResources();
     for (auto r = resources.begin(); r != resources.end(); ++r)
     {
-        nodes << new ResourceTreeItem(data.archive, *r, parentItem);
+        items << new ResourceTreeItem(data.archive, *r, parentItem);
     }
 
-    insertNodes(0, nodes, parent);
+    insertItems(0, items, parentIndex);
 }
 
-void ResourceTree::insertNodes(int position, QList<ResourceTreeItem*> &nodes, const QModelIndex &parent) {
-    ResourceTreeItem *node = getNode(parent);
+void ResourceTree::insertItems(int position, QList<ResourceTreeItem*> &items, const QModelIndex &parent) {
+    ResourceTreeItem *parentItem = getItem(parent);
 
-    beginInsertRows(parent, position, position + nodes.count() - 1);
+    beginInsertRows(parent, position, position + items.count() - 1);
 
-    for (auto &child : nodes)
-        node->appendChild(child);
+    for (auto &child : items)
+        parentItem->appendChild(child);
 
     endInsertRows();
 }
@@ -332,12 +332,12 @@ void ResourceTree::loadKEYDataFiles(Aurora::KEYFile &key) {
     for (uint i = 0; i < dataFiles.size(); i++) {
         try {
 
-            _status->push(tr("Loading data file") + dataFiles[i].toQString() + "...");
+            _mainWindow->status()->push(tr("Loading data file") + dataFiles[i].toQString() + "...");
 
             Aurora::KEYDataFile *dataFile = getKEYDataFile(dataFiles[i].toQString());
             key.addDataFile(i, dataFile);
 
-            _status->pop();
+            _mainWindow->status()->pop();
 
         } catch (Common::Exception &e) {
             e.add("Failed to load KEY data file \"%s\"", dataFiles[i].c_str());
@@ -348,4 +348,4 @@ void ResourceTree::loadKEYDataFiles(Aurora::KEYFile &key) {
     }
 }
 
-} // namespace GUI
+} // End of namespace GUI

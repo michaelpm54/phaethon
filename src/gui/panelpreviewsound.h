@@ -1,13 +1,6 @@
 #ifndef PANELPREVIEWSOUND_H
 #define PANELPREVIEWSOUND_H
 
-#include "verdigris/wobjectdefs.h"
-
-#include "ui/ui_previewsound.h"
-
-#include "src/common/ustring.h"
-#include "src/gui/resourcetreeitem.h"
-
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -16,6 +9,17 @@
 #include <QSpacerItem>
 #include <QtMultimedia>
 #include <QWidget>
+
+#include "verdigris/wobjectdefs.h"
+
+#include "src/common/ustring.h"
+#include "src/sound/types.h"
+
+#include "ui/ui_previewsound.h"
+
+namespace GUI {
+
+class ResourceTreeItem;
 
 class PanelPreviewSound : public QFrame
 {
@@ -33,24 +37,21 @@ private:
 public:
     PanelPreviewSound(QWidget *parent = 0);
 
-    void setItem(const ResourceTreeItem *node);
+    void setItem(const ResourceTreeItem *item);
 
     bool play();
-    W_SLOT(play, W_Access::Private);
     void pause();
-    W_SLOT(pause, W_Access::Private);
     void stop();
-    W_SLOT(stop, W_Access::Private);
     void changeVolume(int value);
-    W_SLOT(changeVolume, W_Access::Private);
     void positionChanged(qint64 position);
-    W_SLOT(positionChanged, W_Access::Private);
 
-    QString formatTime(uint64 t);
-    QString formatPercent(uint64 total, uint64 t);
-    int getSliderPos(uint64 total, uint64 t);
+    QString formatTime(uint64 t) const;
+    QString formatPercent(uint64 total, uint64 t) const;
+    int getSliderPos(uint64 total, uint64 t) const;
     void setButtons(bool enablePlay, bool enablePause, bool enableStop);
     void update();
 };
+
+} // End of namespace GUI
 
 #endif // PANELPREVIEWSOUND_H

@@ -1,5 +1,12 @@
 #include "statusbar.h"
 
+/** @file
+ *  Wrapper class for status bar in order to
+ *  have identical functionality to Phaethon (wx version.)
+ */
+
+namespace GUI {
+
 StatusBar::StatusBar(QStatusBar *statusBar)
 {
     _statusBar = statusBar;
@@ -20,3 +27,5 @@ void StatusBar::pop()
 {
     _statusBar->showMessage(_text);
 }
+
+} // End of namespace GUI
