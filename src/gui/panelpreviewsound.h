@@ -76,7 +76,7 @@ private:
     void update();
 
 public:
-    PanelPreviewSound(QWidget *parent = 0);
+    PanelPreviewSound();
 
     void setItem(const ResourceTreeItem *item);
 
